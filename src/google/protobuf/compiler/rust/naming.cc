@@ -167,6 +167,10 @@ std::string ThunkName(Context& ctx, const Descriptor& msg,
                       op);
 }
 
+std::string VTableName(const FieldDescriptor& field) {
+  return absl::StrCat("__", absl::AsciiStrToUpper(field.name()), "_VTABLE");
+}
+
 std::string RsTypePath(Context& ctx, const FieldDescriptor& field) {
   switch (field.type()) {
     case FieldDescriptor::TYPE_BOOL:
