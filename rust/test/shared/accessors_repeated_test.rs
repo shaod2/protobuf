@@ -209,7 +209,7 @@ fn test_repeated_strings() {
         older_msg.repeated_string_mut().copy_from(msg.repeated_string());
     }
 
-    // TODO: b/87654321 - Use elements_are! when ready
+    // TODO: b/320932827 - Use elements_are! when ready
     assert_that!(older_msg.repeated_string().len(), eq(1));
 
     older_msg.repeated_string_mut().clear();
@@ -227,7 +227,7 @@ fn test_repeated_bytes() {
             msg.repeated_bytes_mut().push(b"set from Mut");
         }
         assert_that!(msg.repeated_bytes().len(), eq(1));
-        // TODO: b/87654321 - Use elements_are! when ready
+        // TODO: b/320932827 - Use elements_are! when ready
         assert_that!(msg.repeated_bytes().get(0).unwrap(), eq(b"set from Mut"));
         older_msg.repeated_bytes_mut().copy_from(msg.repeated_bytes());
     }
