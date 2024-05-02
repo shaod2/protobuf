@@ -1,0 +1,6 @@
+# Simple build tests for compatibility of gencode from previous major versions
+# with the current runtime.
+#
+# Use java/runtime_conformance/add_conformance_test_case.sh to add test cases.
+# e.g., java/runtime_conformance/add_conformance_test_case.sh 3.25.4
+
