@@ -6,6 +6,7 @@
 // https://developers.google.com/open-source/licenses/bsd
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -16,6 +17,7 @@
 #include "absl/log/absl_check.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/cord.h"
+#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/unittest.pb.h"
@@ -25,8 +27,48 @@ namespace google {
 namespace protobuf {
 namespace {
 
+using ::proto2_nofieldpresence_unittest::ExplicitForeignMessage;
+using ::proto2_nofieldpresence_unittest::FOREIGN_BAZ;
+using ::proto2_nofieldpresence_unittest::FOREIGN_FOO;
+using ::proto2_nofieldpresence_unittest::ForeignMessage;
+using ::testing::EqualsProto;
 using ::testing::Gt;
+using ::testing::Not;
 using ::testing::StrEq;
+
+// Custom gmock matchers to simplify testing for map entries.
+//
+// "HasKey" in this case means HasField() will return true in reflection.
+MATCHER(MapEntryHasKey, "") {
+  const Reflection* r = arg.GetReflection();
+  const Descriptor* desc = arg.GetDescriptor();
+  const FieldDescriptor* key = desc->map_key();
+
+  return r->HasField(arg, key);
+}
+
+// "HasValue" in this case means HasField() will return true in reflection.
+MATCHER(MapEntryHasValue, "") {
+  const Reflection* r = arg.GetReflection();
+  const Descriptor* desc = arg.GetDescriptor();
+  const FieldDescriptor* key = desc->map_value();
+
+  return r->HasField(arg, key);
+}
+
+MATCHER(MapEntryKeyExplicitPresence, "") {
+  const Descriptor* desc = arg.GetDescriptor();
+  const FieldDescriptor* key = desc->map_key();
+
+  return key->has_presence();
+}
+
+MATCHER(MapEntryValueExplicitPresence, "") {
+  const Descriptor* desc = arg.GetDescriptor();
+  const FieldDescriptor* value = desc->map_value();
+
+  return value->has_presence();
+}
 
 // Helper: checks that all fields have default (zero/empty) values.
 void CheckDefaultValues(
@@ -329,6 +371,478 @@ TEST(NoFieldPresenceTest, ReflectionHasFieldTest) {
   EXPECT_EQ(false, r->HasField(message, field_string));
 }
 
+// Given a message of type ForeignMessage or ExplicitForeignMessage that's also
+// part of a map value, return whether its field |c| is present.
+bool MapValueSubMessageHasFieldViaReflection(
+    const google::protobuf::Message& map_submessage) {
+  const Reflection* r = map_submessage.GetReflection();
+  const Descriptor* desc = map_submessage.GetDescriptor();
+
+  // "c" only exists in ForeignMessage or ExplicitForeignMessage, so an
+  // assertion is necessary.
+  ABSL_CHECK(absl::EndsWith(desc->name(), "ForeignMessage"));
+  const FieldDescriptor* field = desc->FindFieldByName("c");
+
+  return r->HasField(map_submessage, field);
+}
+
+TEST(NoFieldPresenceTest, ReflectionEmptyMapTest) {
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  ASSERT_NE(field_map_int32_bytes, nullptr);
+  ASSERT_NE(field_map_int32_foreign_enum, nullptr);
+  ASSERT_NE(field_map_int32_foreign_message, nullptr);
+  ASSERT_NE(field_map_int32_explicit_foreign_message, nullptr);
+
+  // Maps are treated as repeated fields -- so fieldsize should be zero.
+  EXPECT_EQ(0, r->FieldSize(message, field_map_int32_bytes));
+  EXPECT_EQ(0, r->FieldSize(message, field_map_int32_foreign_enum));
+  EXPECT_EQ(0, r->FieldSize(message, field_map_int32_foreign_message));
+  EXPECT_EQ(0, r->FieldSize(message, field_map_int32_explicit_foreign_message));
+
+  // Trying to get an unset map entry would crash.
+  EXPECT_DEBUG_DEATH(r->GetRepeatedMessage(message, field_map_int32_bytes, 0),
+                     "index < current_size_");
+}
+
+TEST(NoFieldPresenceTest, TestNonZeroMapEntriesPopulatedInGenCode) {
+  // Set nonzero values for key-value pairs and test that.
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  (*message.mutable_map_int32_bytes())[9] = "hello";
+  (*message.mutable_map_int32_foreign_enum())[99] =
+      proto2_nofieldpresence_unittest::FOREIGN_BAZ;
+  (*message.mutable_map_int32_foreign_message())[123].set_c(10101);
+  (*message.mutable_map_int32_explicit_foreign_message())[456].set_c(20202);
+
+  // ==== Gencode behaviour ====
+  //
+  EXPECT_EQ(1, message.map_int32_bytes().size());
+  EXPECT_EQ(1, message.map_int32_foreign_enum().size());
+  EXPECT_EQ(1, message.map_int32_foreign_message().size());
+  EXPECT_EQ(1, message.map_int32_explicit_foreign_message().size());
+
+  // Keys can be found.
+  EXPECT_TRUE(message.map_int32_bytes().contains(9));
+  EXPECT_TRUE(message.map_int32_foreign_enum().contains(99));
+  EXPECT_TRUE(message.map_int32_foreign_message().contains(123));
+  EXPECT_TRUE(message.map_int32_explicit_foreign_message().contains(456));
+
+  // Values are counted properly.
+  EXPECT_EQ(1, message.map_int32_bytes().count(9));
+  EXPECT_EQ(1, message.map_int32_foreign_enum().count(99));
+  EXPECT_EQ(1, message.map_int32_foreign_message().count(123));
+  EXPECT_EQ(1, message.map_int32_explicit_foreign_message().count(456));
+
+  // Note that `has_foo` APIs are not available for implicit presence fields.
+  // So there is no way to check has_field behaviour in gencode.
+}
+
+TEST(NoFieldPresenceTest, TestNonZeroPrimitiveMapEntriesHaveNoPresence) {
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+
+  // Set nonzero values for key-value pairs and test that.
+  (*message.mutable_map_int32_bytes())[9] = "hello";
+  (*message.mutable_map_int32_foreign_enum())[99] = FOREIGN_BAZ;
+
+  const google::protobuf::Message& bytes_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_bytes, /*index=*/0);
+  const google::protobuf::Message& enum_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_foreign_enum, /*index=*/0);
+
+  // Fields in map entries inherit field_presence from file defaults. If a map
+  // is a "no presence" field, its key is also considered "no presence" from POV
+  // of the descriptor. (Even though the key itself behaves like a normal index
+  // with zeroes being valid indices). One day we will change this...
+  EXPECT_THAT(bytes_map_entry, Not(MapEntryKeyExplicitPresence()));
+  EXPECT_THAT(enum_map_entry, Not(MapEntryKeyExplicitPresence()));
+
+  // Primitive types inherit presence semantics from the map itself.
+  EXPECT_THAT(bytes_map_entry, Not(MapEntryValueExplicitPresence()));
+  EXPECT_THAT(enum_map_entry, Not(MapEntryValueExplicitPresence()));
+}
+
+TEST(NoFieldPresenceTest, TestNonZeroSubMessageMapEntriesHavePresence) {
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  // Set nonzero values for key-value pairs and test that.
+  (*message.mutable_map_int32_foreign_message())[123].set_c(10101);
+  (*message.mutable_map_int32_explicit_foreign_message())[456].set_c(20202);
+
+  const google::protobuf::Message& msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_foreign_message, /*index=*/0);
+  const google::protobuf::Message& explicit_msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_explicit_foreign_message, /*index=*/0);
+
+  // Fields in map entries inherit field_presence from file defaults. If a map
+  // is a "no presence" field, its key is also considered "no presence" from POV
+  // of the descriptor. (Even though the key itself behaves like a normal index
+  // with zeroes being valid indices). One day we will change this...
+  EXPECT_THAT(msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+  EXPECT_THAT(explicit_msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+
+  // Message types always have presence in proto3.
+  EXPECT_THAT(msg_map_entry, MapEntryValueExplicitPresence());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryValueExplicitPresence());
+}
+
+TEST(NoFieldPresenceTest, TestNonZeroPrimitiveMapEntriesPopulatedInReflection) {
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+
+  // Set nonzero values for key-value pairs and test that.
+  (*message.mutable_map_int32_bytes())[9] = "hello";
+  (*message.mutable_map_int32_foreign_enum())[99] =
+      proto2_nofieldpresence_unittest::FOREIGN_BAZ;
+
+  // Map entries show up on reflection.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_bytes));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_enum));
+
+  const google::protobuf::Message& bytes_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_bytes, /*index=*/0);
+  const google::protobuf::Message& enum_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_foreign_enum, /*index=*/0);
+
+  EXPECT_THAT(bytes_map_entry, MapEntryHasKey());
+  EXPECT_THAT(enum_map_entry, MapEntryHasKey());
+  EXPECT_THAT(bytes_map_entry, MapEntryHasValue());
+  EXPECT_THAT(enum_map_entry, MapEntryHasValue());
+}
+
+TEST(NoFieldPresenceTest,
+     TestNonZeroSubMessageMapEntriesPopulatedInReflection) {
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  (*message.mutable_map_int32_foreign_message())[123].set_c(10101);
+  (*message.mutable_map_int32_explicit_foreign_message())[456].set_c(20202);
+
+  // Map entries show up on reflection.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_message));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_explicit_foreign_message));
+
+  const google::protobuf::Message& msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_foreign_message, /*index=*/0);
+  const google::protobuf::Message& explicit_msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_explicit_foreign_message, /*index=*/0);
+
+  EXPECT_THAT(msg_map_entry, MapEntryHasKey());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasKey());
+  EXPECT_THAT(msg_map_entry, MapEntryHasValue());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasValue());
+
+  // For value types that are messages, further test that the message fields
+  // show up on reflection.
+  EXPECT_TRUE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_foreign_message().at(123)));
+  EXPECT_TRUE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_explicit_foreign_message().at(456)));
+}
+
+TEST(NoFieldPresenceTest, TestEmptyMapEntriesPopulatedInGenCode) {
+  // Set zero values for zero keys and test that.
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  (*message.mutable_map_int32_bytes())[0];
+  (*message.mutable_map_int32_foreign_enum())[0];
+  (*message.mutable_map_int32_foreign_message())[0];
+  (*message.mutable_map_int32_explicit_foreign_message())[0];
+
+  // ==== Gencode behaviour ====
+  //
+  // Zero keys are valid entries in gencode.
+  EXPECT_EQ(1, message.map_int32_bytes().size());
+  EXPECT_EQ(1, message.map_int32_foreign_enum().size());
+  EXPECT_EQ(1, message.map_int32_foreign_message().size());
+  EXPECT_EQ(1, message.map_int32_explicit_foreign_message().size());
+
+  EXPECT_TRUE(message.map_int32_bytes().contains(0));
+  EXPECT_TRUE(message.map_int32_foreign_enum().contains(0));
+  EXPECT_TRUE(message.map_int32_foreign_message().contains(0));
+  EXPECT_TRUE(message.map_int32_explicit_foreign_message().contains(0));
+
+  EXPECT_EQ(1, message.map_int32_bytes().count(0));
+  EXPECT_EQ(1, message.map_int32_foreign_enum().count(0));
+  EXPECT_EQ(1, message.map_int32_foreign_message().count(0));
+  EXPECT_EQ(1, message.map_int32_explicit_foreign_message().count(0));
+
+  // Note that `has_foo` APIs are not available for implicit presence fields.
+  // So there is no way to check has_field behaviour in gencode.
+}
+
+TEST(NoFieldPresenceTest, TestEmptyPrimitiveMapEntriesHaveNoPresence) {
+  // For map entries, test that you can set and read zero values.
+  // Importantly this means that proto3 map fields behave like explicit
+  // presence in reflection! i.e. they can be accessed even when zeroed.
+
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+
+  // Set zero values for zero keys and test that.
+  (*message.mutable_map_int32_bytes())[0];
+  (*message.mutable_map_int32_foreign_enum())[0];
+
+  const google::protobuf::Message& bytes_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_bytes, /*index=*/0);
+  const google::protobuf::Message& enum_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_foreign_enum, /*index=*/0);
+
+  // Fields in map entries inherit field_presence from file defaults. If a map
+  // is a "no presence" field, its key is also considered "no presence" from POV
+  // of the descriptor. (Even though the key itself behaves like a normal index
+  // with zeroes being valid indices). One day we will change this...
+  EXPECT_THAT(bytes_map_entry, Not(MapEntryKeyExplicitPresence()));
+  EXPECT_THAT(enum_map_entry, Not(MapEntryKeyExplicitPresence()));
+
+  // Primitive types inherit presence semantics from the map itself.
+  EXPECT_THAT(bytes_map_entry, Not(MapEntryValueExplicitPresence()));
+  EXPECT_THAT(enum_map_entry, Not(MapEntryValueExplicitPresence()));
+}
+
+TEST(NoFieldPresenceTest, TestEmptySubMessageMapEntriesHavePresence) {
+  // For map entries, test that you can set and read zero values.
+  // Importantly this means that proto3 map fields behave like explicit
+  // presence in reflection! i.e. they can be accessed even when zeroed.
+
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  // Set zero values for zero keys and test that.
+  (*message.mutable_map_int32_foreign_message())[0];
+  (*message.mutable_map_int32_explicit_foreign_message())[0];
+
+  // These map entries are considered valid in reflection APIs.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_message));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_explicit_foreign_message));
+
+  const google::protobuf::Message& msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_foreign_message, /*index=*/0);
+  const google::protobuf::Message& explicit_msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_explicit_foreign_message, /*index=*/0);
+
+  // Fields in map entries inherit field_presence from file defaults. If a map
+  // is a "no presence" field, its key is also considered "no presence" from POV
+  // of the descriptor. (Even though the key itself behaves like a normal index
+  // with zeroes being valid indices). One day we will change this...
+  EXPECT_THAT(msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+  EXPECT_THAT(explicit_msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+
+  // Message types always have presence in proto3.
+  EXPECT_THAT(msg_map_entry, MapEntryValueExplicitPresence());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryValueExplicitPresence());
+}
+
+TEST(NoFieldPresenceTest, TestEmptyPrimitiveMapEntriesPopulatedInReflection) {
+  // For map entries, test that you can set and read zero values.
+  // Importantly this means that proto3 map fields behave like explicit
+  // presence in reflection! i.e. they can be accessed even when zeroed.
+
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+
+  // Set zero values for zero keys and test that.
+  (*message.mutable_map_int32_bytes())[0];
+  (*message.mutable_map_int32_foreign_enum())[0];
+
+  // These map entries are considered valid in reflection APIs.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_bytes));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_enum));
+
+  const google::protobuf::Message& bytes_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_bytes, /*index=*/0);
+  const google::protobuf::Message& enum_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_foreign_enum, /*index=*/0);
+
+  // If map entries are truly "no presence", then they should not return true
+  // for HasField!
+  // However, the existing behavior is that map entries behave like
+  // explicit-presence fields in reflection -- i.e. they must return true for
+  // HasField even though they are zero.
+  EXPECT_THAT(bytes_map_entry, MapEntryHasKey());
+  EXPECT_THAT(enum_map_entry, MapEntryHasKey());
+  EXPECT_THAT(bytes_map_entry, MapEntryHasValue());
+  EXPECT_THAT(enum_map_entry, MapEntryHasValue());
+}
+
+TEST(NoFieldPresenceTest, TestEmptySubMessageMapEntriesPopulatedInReflection) {
+  // For map entries, test that you can set and read zero values.
+  // Importantly this means that proto3 map fields behave like explicit
+  // presence in reflection! i.e. they can be accessed even when zeroed.
+
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  // Set zero values for zero keys and test that.
+  (*message.mutable_map_int32_foreign_message())[0];
+  (*message.mutable_map_int32_explicit_foreign_message())[0];
+
+  // These map entries are considered valid in reflection APIs.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_message));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_explicit_foreign_message));
+
+  const google::protobuf::Message& msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_foreign_message, /*index=*/0);
+  const google::protobuf::Message& explicit_msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_explicit_foreign_message, /*index=*/0);
+
+  // If map entries are truly "no presence", then they should not return true
+  // for HasField!
+  // However, the existing behavior is that map entries behave like
+  // explicit-presence fields in reflection -- i.e. they must return true for
+  // HasField even though they are zero.
+  EXPECT_THAT(msg_map_entry, MapEntryHasKey());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasKey());
+  EXPECT_THAT(msg_map_entry, MapEntryHasValue());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasValue());
+
+  // For value types that are messages, further test that the message fields
+  // do not show up on reflection.
+  EXPECT_FALSE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_foreign_message().at(0)));
+  EXPECT_FALSE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_explicit_foreign_message().at(0)));
+}
+
+TEST(NoFieldPresenceTest, TestEmptyMapEntriesPopulatedInReflection) {
+  // For map entries, test that you can set and read zero values.
+  // Importantly this means that proto3 map fields behave like explicit
+  // presence in reflection! i.e. they can be accessed even when zeroed.
+
+  proto2_nofieldpresence_unittest::TestAllTypes message;
+  const Reflection* r = message.GetReflection();
+  const Descriptor* desc = message.GetDescriptor();
+
+  const FieldDescriptor* field_map_int32_bytes =
+      desc->FindFieldByName("map_int32_bytes");
+  const FieldDescriptor* field_map_int32_foreign_enum =
+      desc->FindFieldByName("map_int32_foreign_enum");
+  const FieldDescriptor* field_map_int32_foreign_message =
+      desc->FindFieldByName("map_int32_foreign_message");
+  const FieldDescriptor* field_map_int32_explicit_foreign_message =
+      desc->FindFieldByName("map_int32_explicit_foreign_message");
+
+  // Set zero values for zero keys and test that.
+  (*message.mutable_map_int32_bytes())[0];
+  (*message.mutable_map_int32_foreign_enum())[0];
+  (*message.mutable_map_int32_foreign_message())[0];
+  (*message.mutable_map_int32_explicit_foreign_message())[0];
+
+  // ==== Reflection behaviour ====
+  //
+  // These map entries are considered valid in reflection APIs.
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_bytes));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_enum));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_foreign_message));
+  EXPECT_EQ(1, r->FieldSize(message, field_map_int32_explicit_foreign_message));
+
+  const google::protobuf::Message& bytes_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_bytes, /*index=*/0);
+  const google::protobuf::Message& enum_map_entry =
+      r->GetRepeatedMessage(message, field_map_int32_foreign_enum, /*index=*/0);
+  const google::protobuf::Message& msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_foreign_message, /*index=*/0);
+  const google::protobuf::Message& explicit_msg_map_entry = r->GetRepeatedMessage(
+      message, field_map_int32_explicit_foreign_message, /*index=*/0);
+
+  // Fields in map entries inherit field_presence from file defaults. If a map
+  // is a "no presence" field, its key is also considered "no presence" from POV
+  // of the descriptor. (Even though the key itself behaves like a normal index
+  // with zeroes being valid indices). One day we will change this...
+  ASSERT_THAT(bytes_map_entry, Not(MapEntryKeyExplicitPresence()));
+  ASSERT_THAT(enum_map_entry, Not(MapEntryKeyExplicitPresence()));
+  ASSERT_THAT(msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+  ASSERT_THAT(explicit_msg_map_entry, Not(MapEntryKeyExplicitPresence()));
+
+  // Primitive types inherit presence semantics from the map itself.
+  ASSERT_THAT(bytes_map_entry, Not(MapEntryValueExplicitPresence()));
+  ASSERT_THAT(enum_map_entry, Not(MapEntryValueExplicitPresence()));
+  // Message types always have presence in proto3.
+  ASSERT_THAT(msg_map_entry, MapEntryValueExplicitPresence());
+  ASSERT_THAT(explicit_msg_map_entry, MapEntryValueExplicitPresence());
+
+  // If map entries are truly "no presence", then they should not return true
+  // for HasField!
+  // However, the existing behavior is that map entries behave like
+  // explicit-presence fields in reflection -- i.e. they must return true for
+  // HasField even though they are zero.
+  EXPECT_THAT(bytes_map_entry, MapEntryHasKey());
+  EXPECT_THAT(enum_map_entry, MapEntryHasKey());
+  EXPECT_THAT(msg_map_entry, MapEntryHasKey());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasKey());
+
+  EXPECT_THAT(bytes_map_entry, MapEntryHasValue());
+  EXPECT_THAT(enum_map_entry, MapEntryHasValue());
+  EXPECT_THAT(msg_map_entry, MapEntryHasValue());
+  EXPECT_THAT(explicit_msg_map_entry, MapEntryHasValue());
+
+  // For value types that are messages, further test that the message fields
+  // do not show up on reflection.
+  EXPECT_FALSE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_foreign_message().at(0)));
+  EXPECT_FALSE(MapValueSubMessageHasFieldViaReflection(
+      message.map_int32_explicit_foreign_message().at(0)));
+}
+
 TEST(NoFieldPresenceTest, ReflectionClearFieldTest) {
   proto2_nofieldpresence_unittest::TestAllTypes message;
 
@@ -426,13 +940,13 @@ TEST(NoFieldPresenceTest, MergeFromIfNonzeroTest) {
 
 TEST(NoFieldPresenceTest, ExtraZeroesInWireParseTest) {
   // check extra serialized zeroes on the wire are parsed into the object.
-  proto2_nofieldpresence_unittest::ForeignMessage dest;
+  ForeignMessage dest;
   dest.set_c(42);
   ASSERT_EQ(42, dest.c());
 
   // ExplicitForeignMessage has the same fields as ForeignMessage, but with
   // explicit presence instead of implicit presence.
-  proto2_nofieldpresence_unittest::ExplicitForeignMessage source;
+  ExplicitForeignMessage source;
   source.set_c(0);
   std::string wire = source.SerializeAsString();
   ASSERT_THAT(wire, StrEq(absl::string_view{"\x08\x00", 2}));
@@ -447,13 +961,13 @@ TEST(NoFieldPresenceTest, ExtraZeroesInWireParseTest) {
 
 TEST(NoFieldPresenceTest, ExtraZeroesInWireMergeTest) {
   // check explicit zeros on the wire are merged into an implicit one.
-  proto2_nofieldpresence_unittest::ForeignMessage dest;
+  ForeignMessage dest;
   dest.set_c(42);
   ASSERT_EQ(42, dest.c());
 
   // ExplicitForeignMessage has the same fields as ForeignMessage, but with
   // explicit presence instead of implicit presence.
-  proto2_nofieldpresence_unittest::ExplicitForeignMessage source;
+  ExplicitForeignMessage source;
   source.set_c(0);
   std::string wire = source.SerializeAsString();
   ASSERT_THAT(wire, StrEq(absl::string_view{"\x08\x00", 2}));
@@ -476,7 +990,7 @@ TEST(NoFieldPresenceTest, ExtraZeroesInWireLastWins) {
   // always take the last one -- even if it is a zero.
 
   absl::string_view wire{"\x08\x01\x08\x00", /*len=*/4};  // note the null-byte.
-  proto2_nofieldpresence_unittest::ForeignMessage dest;
+  ForeignMessage dest;
 
   // TODO: b/356132170 -- Add conformance tests to ensure this behaviour is
   //                      well-defined.
@@ -721,8 +1235,8 @@ TYPED_TEST(NoFieldPresenceSerializeTest, OneofPresence) {
 
   message.Clear();
   message.set_oneof_enum(
-      proto2_nofieldpresence_unittest::TestAllTypes::FOO);  // default
-                                                            // value.
+      // FOO is the default value.
+      proto2_nofieldpresence_unittest::TestAllTypes::FOO);
   ASSERT_TRUE(TestSerialize(message, &output_sink));
   EXPECT_EQ(3, this->GetOutput().size());
   EXPECT_TRUE(message.ParseFromString(this->GetOutput()));
@@ -733,6 +1247,150 @@ TYPED_TEST(NoFieldPresenceSerializeTest, OneofPresence) {
   message.set_oneof_string("test");
   message.clear_oneof_string();
   EXPECT_EQ(0, message.ByteSizeLong());
+}
+
+TYPED_TEST(NoFieldPresenceSerializeTest, MapRoundTripNonZeroKeyNonZeroValue) {
+  proto2_nofieldpresence_unittest::TestAllTypes msg;
+
+  (*msg.mutable_map_int32_bytes())[9] = "hello";
+  ASSERT_NE(static_cast<uint32_t>(FOREIGN_BAZ), 0);
+  (*msg.mutable_map_int32_foreign_enum())[99] = FOREIGN_BAZ;
+  (*msg.mutable_map_int32_foreign_message())[123].set_c(10101);
+  (*msg.mutable_map_int32_explicit_foreign_message())[456].set_c(20202);
+
+  // Test that message can serialize.
+  TypeParam& output_sink = this->GetOutputSinkRef();
+  ASSERT_TRUE(TestSerialize(msg, &output_sink));
+  // Maps with zero key or value fields are still serialized.
+  ASSERT_FALSE(this->GetOutput().empty());
+
+  // Test that message can roundtrip.
+  proto2_nofieldpresence_unittest::TestAllTypes rt_msg;
+  EXPECT_TRUE(rt_msg.ParseFromString(this->GetOutput()));
+  EXPECT_THAT(msg, EqualsProto(rt_msg));
+
+  // The map behaviour is pretty much the same whether the key/value field is
+  // zero or not.
+  EXPECT_EQ("hello", rt_msg.map_int32_bytes().at(9));
+  EXPECT_EQ(FOREIGN_BAZ, rt_msg.map_int32_foreign_enum().at(99));
+  EXPECT_EQ(10101, rt_msg.map_int32_foreign_message().at(123).c());
+  EXPECT_EQ(20202, rt_msg.map_int32_explicit_foreign_message().at(456).c());
+
+  // However, explicit presence messages expose a `has_foo` API.
+  // Because map value is nonzero, they're expected to be present.
+  EXPECT_TRUE(rt_msg.map_int32_explicit_foreign_message().at(456).has_c());
+  // Getting an unset map entry via `at()` would crash.
+  EXPECT_DEATH(rt_msg.map_int32_explicit_foreign_message().at(0).has_c(),
+               "key not found");
+}
+
+TYPED_TEST(NoFieldPresenceSerializeTest, MapRoundTripZeroKeyNonZeroValue) {
+  proto2_nofieldpresence_unittest::TestAllTypes msg;
+
+  (*msg.mutable_map_int32_bytes())[0] = "hello";
+  ASSERT_NE(static_cast<uint32_t>(FOREIGN_BAZ), 0);
+  (*msg.mutable_map_int32_foreign_enum())[0] = FOREIGN_BAZ;
+  (*msg.mutable_map_int32_foreign_message())[0].set_c(10101);
+  (*msg.mutable_map_int32_explicit_foreign_message())[0].set_c(20202);
+
+  // Test that message can serialize.
+  TypeParam& output_sink = this->GetOutputSinkRef();
+  ASSERT_TRUE(TestSerialize(msg, &output_sink));
+  // Maps with zero key or value fields are still serialized.
+  ASSERT_FALSE(this->GetOutput().empty());
+
+  // Test that message can roundtrip.
+  proto2_nofieldpresence_unittest::TestAllTypes rt_msg;
+  EXPECT_TRUE(rt_msg.ParseFromString(this->GetOutput()));
+  EXPECT_THAT(msg, EqualsProto(rt_msg));
+
+  // The map behaviour is pretty much the same whether the key/value field is
+  // zero or not.
+  EXPECT_EQ("hello", rt_msg.map_int32_bytes().at(0));
+  EXPECT_EQ(FOREIGN_BAZ, rt_msg.map_int32_foreign_enum().at(0));
+  EXPECT_EQ(10101, rt_msg.map_int32_foreign_message().at(0).c());
+  EXPECT_EQ(20202, rt_msg.map_int32_explicit_foreign_message().at(0).c());
+
+  // However, explicit presence messages expose a `has_foo` API.
+  // Because map value is nonzero, they're expected to be present.
+  EXPECT_TRUE(rt_msg.map_int32_explicit_foreign_message().at(0).has_c());
+  // Getting an unset map entry via `at()` would crash.
+  EXPECT_DEATH(rt_msg.map_int32_explicit_foreign_message().at(456).has_c(),
+               "key not found");
+}
+
+// Note: "zero value" in this case means that the value is zero, but still
+// explicitly assigned.
+TYPED_TEST(NoFieldPresenceSerializeTest, MapRoundTripZeroKeyZeroValue) {
+  proto2_nofieldpresence_unittest::TestAllTypes msg;
+
+  (*msg.mutable_map_int32_bytes())[0] = "";
+  ASSERT_EQ(static_cast<uint32_t>(FOREIGN_FOO), 0);
+  (*msg.mutable_map_int32_foreign_enum())[0] = FOREIGN_FOO;
+  (*msg.mutable_map_int32_foreign_message())[0].set_c(0);
+  (*msg.mutable_map_int32_explicit_foreign_message())[0].set_c(0);
+
+  // Test that message can serialize.
+  TypeParam& output_sink = this->GetOutputSinkRef();
+  ASSERT_TRUE(TestSerialize(msg, &output_sink));
+  // Maps with zero key or value fields are still serialized.
+  ASSERT_FALSE(this->GetOutput().empty());
+
+  // Test that message can roundtrip.
+  proto2_nofieldpresence_unittest::TestAllTypes rt_msg;
+  EXPECT_TRUE(rt_msg.ParseFromString(this->GetOutput()));
+  EXPECT_THAT(msg, EqualsProto(rt_msg));
+
+  // The map behaviour is pretty much the same whether the key/value field is
+  // zero or not.
+  EXPECT_EQ("", rt_msg.map_int32_bytes().at(0));
+  EXPECT_EQ(FOREIGN_FOO, rt_msg.map_int32_foreign_enum().at(0));
+  EXPECT_EQ(0, rt_msg.map_int32_foreign_message().at(0).c());
+  EXPECT_EQ(0, rt_msg.map_int32_explicit_foreign_message().at(0).c());
+
+  // However, explicit presence messages expose a `has_foo` API.
+  // Because fields in an explicit message is explicitly set, they are expected
+  // to be present.
+  EXPECT_TRUE(rt_msg.map_int32_explicit_foreign_message().at(0).has_c());
+  // Getting an unset map entry via `at()` would crash.
+  EXPECT_DEATH(rt_msg.map_int32_explicit_foreign_message().at(456).has_c(),
+               "key not found");
+}
+
+// Note: "default value" in this case means that there is no explicit assignment
+// to any value. Instead, map values are just created with operator[].
+TYPED_TEST(NoFieldPresenceSerializeTest, MapRoundTripZeroKeyDefaultValue) {
+  proto2_nofieldpresence_unittest::TestAllTypes msg;
+
+  (*msg.mutable_map_int32_bytes())[0];
+  (*msg.mutable_map_int32_foreign_enum())[0];
+  (*msg.mutable_map_int32_foreign_message())[0];
+  (*msg.mutable_map_int32_explicit_foreign_message())[0];
+
+  // Test that message can serialize.
+  TypeParam& output_sink = this->GetOutputSinkRef();
+  ASSERT_TRUE(TestSerialize(msg, &output_sink));
+  // Maps with zero key or value fields are still serialized.
+  ASSERT_FALSE(this->GetOutput().empty());
+
+  // Test that message can roundtrip.
+  proto2_nofieldpresence_unittest::TestAllTypes rt_msg;
+  EXPECT_TRUE(rt_msg.ParseFromString(this->GetOutput()));
+  EXPECT_THAT(msg, EqualsProto(rt_msg));
+
+  // The map behaviour is pretty much the same whether the key/value field is
+  // zero or not.
+  EXPECT_EQ("", rt_msg.map_int32_bytes().at(0));
+  EXPECT_EQ(FOREIGN_FOO, rt_msg.map_int32_foreign_enum().at(0));
+  EXPECT_EQ(0, rt_msg.map_int32_foreign_message().at(0).c());
+  EXPECT_EQ(0, rt_msg.map_int32_explicit_foreign_message().at(0).c());
+
+  // However, explicit presence messages expose a `has_foo` API.
+  // Because fields in an explicit message is not set, they are not present.
+  EXPECT_FALSE(rt_msg.map_int32_explicit_foreign_message().at(0).has_c());
+  // Getting an unset map entry via `at()` would crash.
+  EXPECT_DEATH(rt_msg.map_int32_explicit_foreign_message().at(456).has_c(),
+               "key not found");
 }
 
 }  // namespace
