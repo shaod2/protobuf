@@ -1,0 +1,22 @@
+cc_library(
+    name = "full",
+    srcs = [
+        "generator_factory.cc",
+        "message.cc",
+        "message.h",
+    ],
+    hdrs = ["generator_factory.h"],
+    compatible_with = ["//buildenv/target:non_prod"],
+    strip_include_prefix = "/src",
+    visibility = ["//src/google/protobuf/compiler/kotlin:__subpackages__"],
+    deps = [
+        "//src/google/protobuf",
+        "//src/google/protobuf:port",
+        "//src/google/protobuf/compiler/java:helpers",
+        "//src/google/protobuf/compiler/java/full:fg",
+        "//src/google/protobuf/compiler/java/full:mfg",
+        "//src/google/protobuf/compiler/kotlin:generator_common",
+        "//src/google/protobuf/io:printer",
+        "@com_google_absl//absl/log:absl_check",
+    ],
+)

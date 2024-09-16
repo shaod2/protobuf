@@ -5,8 +5,6 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
-// Generates Kotlin code for a given .proto file.
-
 #include "google/protobuf/compiler/kotlin/file.h"
 
 #include <memory>
@@ -18,11 +16,12 @@
 #include "google/protobuf/compiler/java/context.h"
 #include "google/protobuf/compiler/java/generator_factory.h"
 #include "google/protobuf/compiler/java/helpers.h"
-#include "google/protobuf/compiler/java/full/generator_factory.h"
-#include "google/protobuf/compiler/java/lite/generator_factory.h"
 #include "google/protobuf/compiler/java/name_resolver.h"
 #include "google/protobuf/compiler/java/names.h"
 #include "google/protobuf/compiler/java/options.h"
+#include "google/protobuf/compiler/kotlin/full/generator_factory.h"
+#include "google/protobuf/compiler/kotlin/generator_factory.h"
+#include "google/protobuf/compiler/kotlin/lite/generator_factory.h"
 #include "google/protobuf/descriptor.pb.h"
 #include "google/protobuf/io/printer.h"
 
@@ -34,16 +33,13 @@ namespace kotlin {
 using google::protobuf::compiler::java::Context;
 using google::protobuf::compiler::java::Options;
 
-// class LiteGeneratorFactory;
-
 namespace {
-std::unique_ptr<java::GeneratorFactory> CreateGeneratorFactory(
+std::unique_ptr<GeneratorFactory> CreateGeneratorFactory(
     const FileDescriptor* file, const Options& options, Context* context) {
   if (java::HasDescriptorMethods(file, context->EnforceLite())) {
-    return java::MakeImmutableGeneratorFactory(context);
-  } else {
-    return java::MakeImmutableLiteGeneratorFactory(context);
+    return MakeFullGeneratorFactory(context);
   }
+  return MakeLiteGeneratorFactory(context);
 }
 }  // namespace
 
@@ -91,7 +87,7 @@ void FileGenerator::GenerateSiblings(
     std::vector<std::string>* annotation_list) {
   for (int i = 0; i < file_->message_type_count(); i++) {
     const Descriptor* descriptor = file_->message_type(i);
-    java::MessageGenerator* generator = message_generators_[i].get();
+    MessageGenerator* generator = message_generators_[i].get();
     auto open_file = [context](const std::string& filename) {
       return std::unique_ptr<io::ZeroCopyOutputStream>(context->Open(filename));
     };
@@ -125,8 +121,8 @@ void FileGenerator::GenerateSiblings(
           "package", java::EscapeKotlinKeywords(java_package_));
     }
 
-    generator->GenerateKotlinMembers(&printer);
-    generator->GenerateTopLevelKotlinMembers(&printer);
+    generator->GenerateMembers(&printer);
+    generator->GenerateTopLevelMembers(&printer);
 
     if (options_.annotate_code) {
       auto info_output = open_file(info_full_path);
