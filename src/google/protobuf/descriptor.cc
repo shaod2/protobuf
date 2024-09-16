@@ -3570,8 +3570,10 @@ void Descriptor::DebugString(int depth, std::string* contents,
   if (reserved_name_count() > 0) {
     absl::SubstituteAndAppend(contents, "$0  reserved ", prefix);
     for (int i = 0; i < reserved_name_count(); i++) {
-      absl::SubstituteAndAppend(contents, "\"$0\", ",
-                                absl::CEscape(reserved_name(i)));
+      absl::SubstituteAndAppend(
+          contents,
+          file()->edition() < Edition::EDITION_2023 ? "\"$0\", " : "$0, ",
+          absl::CEscape(reserved_name(i)));
     }
     contents->replace(contents->size() - 2, 2, ";\n");
   }
@@ -3790,8 +3792,10 @@ void EnumDescriptor::DebugString(
   if (reserved_name_count() > 0) {
     absl::SubstituteAndAppend(contents, "$0  reserved ", prefix);
     for (int i = 0; i < reserved_name_count(); i++) {
-      absl::SubstituteAndAppend(contents, "\"$0\", ",
-                                absl::CEscape(reserved_name(i)));
+      absl::SubstituteAndAppend(
+          contents,
+          file()->edition() < Edition::EDITION_2023 ? "\"$0\", " : "$0, ",
+          absl::CEscape(reserved_name(i)));
     }
     contents->replace(contents->size() - 2, 2, ";\n");
   }

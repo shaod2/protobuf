@@ -111,6 +111,7 @@ TEST(FileTest, TopologicallyOrderedDescriptors) {
       "RedactedFields.MapUnredactedStringEntry",
       "RedactedFields.MapRedactedStringEntry",
       "OptionalGroup_extension",
+      "OpenEnumMessage",
       "OneString",
       "OneBytes",
       "MoreString",
