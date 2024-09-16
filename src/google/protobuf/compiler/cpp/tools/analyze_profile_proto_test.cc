@@ -22,7 +22,7 @@ namespace {
 
 std::string AnalyzeToText(const AccessInfo& info,
                           AnalyzeProfileProtoOptions options) {
-  std::string filename = file::JoinPath(TestTempDir(), "profile.proto");
+  std::string filename = file::JoinPath(testing::TempDir(), "profile.proto");
   ABSL_CHECK_OK(file::SetBinaryProto(filename, info, true));
   std::stringstream str;
   ABSL_CHECK_OK(AnalyzeProfileProtoToText(str, filename, options));

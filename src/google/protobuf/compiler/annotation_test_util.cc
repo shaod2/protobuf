@@ -50,7 +50,7 @@ class DescriptorCapturingGenerator : public CodeGenerator {
 
 void AddFile(absl::string_view filename, absl::string_view data) {
   ABSL_CHECK_OK(File::SetContents(
-      absl::StrCat(TestTempDir(), "/", filename), data, true));
+      absl::StrCat(testing::TempDir(), "/", filename), data, true));
 }
 
 bool RunProtoCompiler(const std::string& filename,
@@ -61,8 +61,8 @@ bool RunProtoCompiler(const std::string& filename,
   DescriptorCapturingGenerator capturing_generator(file);
   cli->RegisterGenerator("--capture_out", &capturing_generator, "");
 
-  std::string proto_path = absl::StrCat("-I", TestTempDir());
-  std::string capture_out = absl::StrCat("--capture_out=", TestTempDir());
+  std::string proto_path = absl::StrCat("-I", testing::TempDir());
+  std::string capture_out = absl::StrCat("--capture_out=", testing::TempDir());
 
   const char* argv[] = {"protoc", proto_path.c_str(),
                         plugin_specific_args.c_str(), capture_out.c_str(),

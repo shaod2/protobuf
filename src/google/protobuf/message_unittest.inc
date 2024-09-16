@@ -145,7 +145,7 @@ TEST(MESSAGE_TEST_NAME, SerializeToBrokenOstream) {
 }
 
 TEST(MESSAGE_TEST_NAME, ParseFromFileDescriptor) {
-  std::string filename = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string filename = absl::StrCat(testing::TempDir(), "/golden_message");
   UNITTEST::TestAllTypes expected_message;
   TestUtil::SetAllFields(&expected_message);
   ABSL_CHECK_OK(File::SetContents(
@@ -162,7 +162,7 @@ TEST(MESSAGE_TEST_NAME, ParseFromFileDescriptor) {
 }
 
 TEST(MESSAGE_TEST_NAME, ParsePackedFromFileDescriptor) {
-  std::string filename = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string filename = absl::StrCat(testing::TempDir(), "/golden_message");
   UNITTEST::TestPackedTypes expected_message;
   TestUtil::SetPackedFields(&expected_message);
   ABSL_CHECK_OK(File::SetContents(

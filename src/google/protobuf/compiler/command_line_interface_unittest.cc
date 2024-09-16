@@ -139,7 +139,7 @@ class CommandLineInterfaceTest : public CommandLineInterfaceTester {
 
   // Runs the CommandLineInterface with the given command line.  The
   // command is automatically split on spaces, and the string "$tmpdir"
-  // is replaced with TestTempDir().
+  // is replaced with testing::TempDir().
   void Run(std::string command);
   void RunWithArgs(std::vector<std::string> args);
 
@@ -4075,7 +4075,7 @@ class EncodeDecodeTest : public testing::TestWithParam<EncodeDecodeTestMode> {
   }
 
   void RedirectStdinFromText(const std::string& input) {
-    std::string filename = absl::StrCat(TestTempDir(), "/test_stdin");
+    std::string filename = absl::StrCat(testing::TempDir(), "/test_stdin");
     ABSL_CHECK_OK(File::SetContents(filename, input, true));
     ABSL_CHECK(RedirectStdinFromFile(filename));
   }
@@ -4178,7 +4178,7 @@ class EncodeDecodeTest : public testing::TestWithParam<EncodeDecodeTestMode> {
  private:
   void WriteUnittestProtoDescriptorSet() {
     unittest_proto_descriptor_set_filename_ =
-        absl::StrCat(TestTempDir(), "/unittest_proto_descriptor_set.bin");
+        absl::StrCat(testing::TempDir(), "/unittest_proto_descriptor_set.bin");
     FileDescriptorSet file_descriptor_set;
     protobuf_unittest::TestAllTypes test_all_types;
     test_all_types.descriptor()->file()->CopyTo(file_descriptor_set.add_file());
@@ -4211,7 +4211,7 @@ static void WriteGoldenMessage(const std::string& filename) {
 }
 
 TEST_P(EncodeDecodeTest, Encode) {
-  std::string golden_path = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string golden_path = absl::StrCat(testing::TempDir(), "/golden_message");
   WriteGoldenMessage(golden_path);
   RedirectStdinFromFile(TestUtil::GetTestDataPath(
       "google/protobuf/"
@@ -4227,7 +4227,7 @@ TEST_P(EncodeDecodeTest, Encode) {
 }
 
 TEST_P(EncodeDecodeTest, Decode) {
-  std::string golden_path = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string golden_path = absl::StrCat(testing::TempDir(), "/golden_message");
   WriteGoldenMessage(golden_path);
   RedirectStdinFromFile(golden_path);
   EXPECT_TRUE(
@@ -4282,7 +4282,7 @@ TEST_P(EncodeDecodeTest, ProtoParseError) {
 }
 
 TEST_P(EncodeDecodeTest, EncodeDeterministicOutput) {
-  std::string golden_path = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string golden_path = absl::StrCat(testing::TempDir(), "/golden_message");
   WriteGoldenMessage(golden_path);
   RedirectStdinFromFile(TestUtil::GetTestDataPath(
       "google/protobuf/"
@@ -4298,7 +4298,7 @@ TEST_P(EncodeDecodeTest, EncodeDeterministicOutput) {
 }
 
 TEST_P(EncodeDecodeTest, DecodeDeterministicOutput) {
-  std::string golden_path = absl::StrCat(TestTempDir(), "/golden_message");
+  std::string golden_path = absl::StrCat(testing::TempDir(), "/golden_message");
   WriteGoldenMessage(golden_path);
   RedirectStdinFromFile(golden_path);
   EXPECT_FALSE(

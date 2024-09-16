@@ -40,7 +40,7 @@ struct ExpectedOutput {
 void AddFile(absl::string_view filename, absl::string_view data);
 
 // Runs proto compiler. Captures proto file structure in FileDescriptorProto.
-// Files will be generated in TestTempDir() folder. Callers of this
+// Files will be generated in testing::TempDir() folder. Callers of this
 // function must read generated files themselves.
 //
 // filename: source .proto file used to generate code.
