@@ -89,26 +89,34 @@ class MessageCreator {
   };
 
   constexpr MessageCreator()
-      : allocation_size_(), tag_(), arena_bits_(uintptr_t{}) {}
+      : allocation_size_(), tag_(), alignment_(), arena_bits_(uintptr_t{}) {}
 
   static constexpr MessageCreator ZeroInit(uint32_t allocation_size,
+                                           uint8_t alignment,
                                            uintptr_t arena_bits = 0) {
     MessageCreator out;
     out.allocation_size_ = allocation_size;
     out.tag_ = kZeroInit;
+    out.alignment_ = alignment;
     out.arena_bits_ = arena_bits;
     return out;
   }
   static constexpr MessageCreator CopyInit(uint32_t allocation_size,
+                                           uint8_t alignment,
                                            uintptr_t arena_bits = 0) {
     MessageCreator out;
     out.allocation_size_ = allocation_size;
     out.tag_ = kMemcpy;
+    out.alignment_ = alignment;
     out.arena_bits_ = arena_bits;
     return out;
   }
-  constexpr MessageCreator(Func func, uint32_t allocation_size)
-      : allocation_size_(allocation_size), tag_(kFunc), func_(func) {}
+  constexpr MessageCreator(Func func, uint32_t allocation_size,
+                           uint8_t alignment)
+      : allocation_size_(allocation_size),
+        tag_(kFunc),
+        alignment_(alignment),
+        func_(func) {}
 
   // Template for testing.
   template <bool test_call = false, typename MessageLite>
@@ -124,6 +132,8 @@ class MessageCreator {
 
   uint32_t allocation_size() const { return allocation_size_; }
 
+  uint8_t alignment() const { return alignment_; }
+
   uintptr_t arena_bits() const {
     ABSL_DCHECK_NE(+tag(), +kFunc);
     return arena_bits_;
@@ -132,6 +142,7 @@ class MessageCreator {
  private:
   uint32_t allocation_size_;
   Tag tag_;
+  uint8_t alignment_;
   union {
     Func func_;
     uintptr_t arena_bits_;
@@ -638,7 +649,7 @@ class PROTOBUF_EXPORT MessageLite {
 #endif
       return T::InternalNewImpl_();
     } else {
-      return internal::MessageCreator(&T::PlacementNew_, sizeof(T));
+      return internal::MessageCreator(&T::PlacementNew_, sizeof(T), alignof(T));
     }
   }
 
