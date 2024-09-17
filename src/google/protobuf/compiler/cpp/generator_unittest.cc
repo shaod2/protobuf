@@ -255,7 +255,7 @@ TEST_F(CppGeneratorTest, StringTypeCordNotForExtension) {
       "--experimental_editions foo.proto");
 
   ExpectErrorSubstring(
-      "Extension bar specifies string_type=CORD which is not supported for "
+      "Extension bar specifies cord type which is not supported for "
       "extensions.");
 }
 
@@ -286,7 +286,7 @@ TEST_F(CppGeneratorTest, CtypeOnExtensionTest) {
   RunProtoc(
       "protocol_compiler --proto_path=$tmpdir --cpp_out=$tmpdir foo.proto");
   ExpectErrorSubstring(
-      "Extension bar specifies ctype=CORD which is "
+      "Extension bar specifies cord type which is "
       "not supported for extensions.");
 }
 }  // namespace
