@@ -19,7 +19,7 @@ rust_test(
     deps = [
         ":test_utils",
         "//rust:protobuf_cpp",
-        "//src/google/protobuf:unittest_cpp_rust_proto",
+        "//src/google/protobuf:test_protos_cpp_rust_proto",
         "@crate_index//:googletest",
     ],
 )

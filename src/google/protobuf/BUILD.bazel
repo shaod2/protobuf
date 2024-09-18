@@ -10,6 +10,11 @@ load("//bazel:upb_c_proto_library.bzl", "upb_c_proto_library")
 load("//bazel:upb_minitable_proto_library.bzl", "upb_minitable_proto_library")
 load("//bazel:upb_proto_reflection_library.bzl", "upb_proto_reflection_library")
 load("//build_defs:cpp_opts.bzl", "COPTS", "LINK_OPTS")
+load(
+    "//rust:defs.bzl",
+    "rust_cc_proto_library",
+    "rust_upb_proto_library",
+)
 load("//upb/cmake:build_defs.bzl", "staleness_test")
 
 package(
@@ -1152,6 +1157,16 @@ cc_proto_library(
         "//rust/test:__subpackages__",
         "//src/google/protobuf:__subpackages__",
     ],
+    deps = [":test_protos"],
+)
+
+rust_cc_proto_library(
+    name = "test_protos_cpp_rust_proto",
+    deps = [":test_protos"],
+)
+
+rust_upb_proto_library(
+    name = "test_protos_upb_rust_proto",
     deps = [":test_protos"],
 )
 
