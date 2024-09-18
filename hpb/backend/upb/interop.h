@@ -10,6 +10,8 @@
 
 // The sole public header in hpb/backend/upb
 
+#include <cstring>
+
 #include "absl/strings/string_view.h"
 #include "google/protobuf/hpb/internal/internal.h"
 #include "google/protobuf/hpb/ptr.h"
@@ -97,6 +99,13 @@ typename T::Proxy MakeHandle(upb_Message* msg, upb_Arena* arena) {
 
 inline absl::string_view FromUpbStringView(upb_StringView str) {
   return absl::string_view(str.data, str.size);
+}
+
+inline upb_StringView ToUpbStringView(absl::string_view str, upb_Arena* arena) {
+  const size_t str_size = str.size();
+  char* buffer = static_cast<char*>(upb_Arena_Malloc(arena, str_size));
+  memcpy(buffer, str.data(), str_size);
+  return upb_StringView_FromDataAndSize(buffer, str_size);
 }
 
 }  // namespace hpb::interop::upb
