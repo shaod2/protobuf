@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "google/protobuf/descriptor.pb.h"
 #include <gtest/gtest.h>
 #include "absl/base/config.h"
 
@@ -44,6 +45,13 @@ TEST(PortTest, UnreachableTrapsOnDebugMode) {
   EXPECT_DEATH(Unreachable(), "Assumption failed: 'Unreachable'");
 #endif
 #endif
+}
+
+TEST(EditionsTest, DenseRange) {
+  for (int i = static_cast<int>(MinimumAllowedEdition());
+       i <= static_cast<int>(MaximumAllowedEdition()); ++i) {
+    EXPECT_TRUE(Edition_IsValid(i));
+  }
 }
 
 }  // namespace internal

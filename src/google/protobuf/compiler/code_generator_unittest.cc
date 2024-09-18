@@ -22,6 +22,7 @@
 #include "google/protobuf/compiler/parser.h"
 #include "google/protobuf/io/tokenizer.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
+#include "google/protobuf/port.h"
 #include "google/protobuf/test_textproto.h"
 #include "google/protobuf/unittest_features.pb.h"
 
@@ -72,8 +73,8 @@ class TestGenerator : public CodeGenerator {
 
  private:
   uint64_t features_ = CodeGenerator::Feature::FEATURE_SUPPORTS_EDITIONS;
-  Edition minimum_edition_ = PROTOBUF_MINIMUM_EDITION;
-  Edition maximum_edition_ = PROTOBUF_MAXIMUM_EDITION;
+  Edition minimum_edition_ = google::protobuf::internal::MinimumAllowedEdition();
+  Edition maximum_edition_ = google::protobuf::internal::MaximumAllowedEdition();
   std::vector<const FieldDescriptor*> feature_extensions_ = {
       GetExtensionReflection(pb::test)};
 };
@@ -320,8 +321,10 @@ TEST_F(CodeGeneratorTest, BuildFeatureSetDefaultsUnsupported) {
   auto result = generator.BuildFeatureSetDefaults();
 
   ASSERT_TRUE(result.ok()) << result.status().message();
-  EXPECT_EQ(result->minimum_edition(), PROTOBUF_MINIMUM_EDITION);
-  EXPECT_EQ(result->maximum_edition(), PROTOBUF_MAXIMUM_EDITION);
+  EXPECT_EQ(result->minimum_edition(),
+            google::protobuf::internal::MinimumAllowedEdition());
+  EXPECT_EQ(result->maximum_edition(),
+            google::protobuf::internal::MaximumAllowedEdition());
 }
 
 #include "google/protobuf/port_undef.inc"

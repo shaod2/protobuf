@@ -26,6 +26,7 @@
 #include "google/protobuf/compiler/plugin.pb.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/feature_resolver.h"
+#include "google/protobuf/port.h"
 
 // Must be included last.
 #include "google/protobuf/port_def.inc"
@@ -70,7 +71,8 @@ absl::StatusOr<FeatureSetDefaults> CodeGenerator::BuildFeatureSetDefaults()
     // anyway.
     return FeatureResolver::CompileDefaults(
         FeatureSet::descriptor(), GetFeatureExtensions(),
-        PROTOBUF_MINIMUM_EDITION, PROTOBUF_MAXIMUM_EDITION);
+        google::protobuf::internal::MinimumAllowedEdition(),
+        google::protobuf::internal::MaximumAllowedEdition());
   }
   return FeatureResolver::CompileDefaults(
       FeatureSet::descriptor(), GetFeatureExtensions(), GetMinimumEdition(),

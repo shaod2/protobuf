@@ -36,9 +36,22 @@
 namespace google {
 namespace protobuf {
 
+// Defined in descriptor.proto
+enum Edition : int;
+
 class MessageLite;
 
 namespace internal {
+
+// Template to allow lazy lookup of the label.
+template <typename T = Edition>
+constexpr auto MinimumAllowedEdition() {
+  return T::EDITION_PROTO2;
+}
+template <typename T = Edition>
+constexpr auto MaximumAllowedEdition() {
+  return T::EDITION_2023;
+}
 
 template <typename T>
 inline PROTOBUF_ALWAYS_INLINE void StrongPointer(T* var) {

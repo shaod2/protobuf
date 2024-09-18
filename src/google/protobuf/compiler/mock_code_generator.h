@@ -17,6 +17,7 @@
 #include "absl/strings/string_view.h"
 #include "google/protobuf/compiler/code_generator.h"
 #include "google/protobuf/descriptor.h"
+#include "google/protobuf/port.h"
 #include "google/protobuf/unittest_features.pb.h"
 
 // Must be included last.
@@ -119,8 +120,8 @@ class MockCodeGenerator : public CodeGenerator {
  private:
   std::string name_;
   uint64_t suppressed_features_ = 0;
-  mutable Edition minimum_edition_ = PROTOBUF_MINIMUM_EDITION;
-  mutable Edition maximum_edition_ = PROTOBUF_MAXIMUM_EDITION;
+  mutable Edition minimum_edition_ = google::protobuf::internal::MinimumAllowedEdition();
+  mutable Edition maximum_edition_ = google::protobuf::internal::MaximumAllowedEdition();
   std::vector<const FieldDescriptor*> feature_extensions_ = {
       GetExtensionReflection(pb::test)};
 
