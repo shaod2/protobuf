@@ -5389,7 +5389,7 @@ Symbol DescriptorBuilder::FindSymbol(const absl::string_view name,
       if (dep != nullptr && IsInPackage(dep, name)) return result;
     }
     for (const auto* dep : option_dependencies_) {
-      // Note:  An dependency may be nullptr if it was not found or had errors.
+      // Note:  A dependency may be nullptr if it was not found or had errors.
       if (dep != nullptr && IsInPackage(dep, name)) return result;
     }
   }
@@ -8487,6 +8487,18 @@ void DescriptorBuilder::ValidateOptions(const FileDescriptor* file,
   }
   if (file->edition() == Edition::EDITION_PROTO3) {
     ValidateProto3(file, proto);
+  }
+
+  if (file->edition() >= Edition::EDITION_2024 &&
+      file->weak_dependency_count() > 0) {
+    AddError("weak", proto, DescriptorPool::ErrorCollector::IMPORT,
+             "weak imports are not allowed under edition 2024 and beyond.");
+  }
+
+  if (file->edition() < Edition::EDITION_2024 &&
+      file->option_dependency_count() > 0) {
+    AddError("option", proto, DescriptorPool::ErrorCollector::IMPORT,
+             "option imports are not supported before edition 2024.");
   }
 }
 
