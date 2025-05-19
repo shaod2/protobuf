@@ -405,8 +405,8 @@ pub unsafe fn repeated_message_copy_from<T: ProxiedInRepeated>(
                 .expect("upb_Array* element should not be NULL");
             // Avoid the use of `upb_Array_DeepClone` as it creates an
             // entirely new `upb_Array*` at a new memory address.
-            let cloned_msg = upb_Message_DeepClone(src_msg, minitable, dest.raw_arena(Private))
-                .expect("upb_Message_DeepClone failed.");
+            let cloned_msg =
+                upb::deep_clone(src_msg, minitable, dest.arena(Private)).expect("clone failed.");
             upb_Array_Set(dest.as_raw(Private), i, upb_MessageValue { msg_val: Some(cloned_msg) });
         }
     }
