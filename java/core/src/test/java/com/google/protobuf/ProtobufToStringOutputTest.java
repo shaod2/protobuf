@@ -29,7 +29,7 @@ public final class ProtobufToStringOutputTest extends DebugFormatTest {
 
   @Test
   public void toStringFormat_defaultFormat() {
-    assertThat(message.toString())
+    assertThat(TextFormat.printer().printToString(message))
         .matches(
             "optional_redacted_string: \"bar\"\n"
                 + "optional_unredacted_string: \"foo\"\n"
@@ -105,7 +105,7 @@ public final class ProtobufToStringOutputTest extends DebugFormatTest {
 
   @Test
   public void builderToStringFormat_defaultFormat() {
-    assertThat(messageBuilder.toString())
+    assertThat(TextFormat.printer().printToString(messageBuilder))
         .matches(
             "optional_redacted_string: \"bar\"\n"
                 + "optional_unredacted_string: \"foo\"\n"
