@@ -86,6 +86,13 @@ extern "C" {
       return INITFUNC_ERRORVAL;
     }
 
+#if PY_VERSION_HEX >= 0x030d0000
+    if (PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) != 0) {
+      Py_DECREF(module);
+      return NULL;
+    }
+#endif  // PY_VERSION_HEX >= 0x030d0000
+
     // Adds the module variable "api_version".
     if (PyModule_AddIntConstant(
         module,
